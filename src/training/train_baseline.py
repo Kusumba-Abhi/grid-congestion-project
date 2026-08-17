@@ -1,0 +1,88 @@
+import json
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+
+TRAIN_PATH = "data/processed/train.jsonl"
+VAL_PATH = "data/processed/val.jsonl"
+TEST_PATH = "data/processed/test.jsonl"
+
+def load_jsonl(path):
+    data = []
+    with open(path, "r") as f:
+        for line in f:
+            data.append(json.loads(line))
+    return data
+
+def extract_features(scenario):
+    """Flatten a scenario's structured fields into a fixed-length numeric vector."""
+    weather = scenario["weather"]
+    event = scenario["event"]
+
+    # Sum total renewable output across all buses (simplification: total wind + solar MW)
+    total_wind = sum(v["wind_mw"] for v in scenario["renewable_output"].values())
+    total_solar = sum(v["solar_mw"] for v in scenario["renewable_output"].values())
+
+    features = [
+        weather["wind_speed_kmh"],
+        weather["solar_irradiance_wm2"],
+        int(weather["storm_flag"]),
+        scenario["load_multiplier"],
+        total_wind,
+        total_solar,
+        1 if event["type"] == "line_outage" else 0,
+        1 if event.get("cause") == "storm" else 0,
+        1 if event.get("cause") == "equipment_failure" else 0,
+    ]
+    return features
+
+def prepare_dataset(data):
+    X = [extract_features(s) for s in data]
+    y = [int(s["congested"]) for s in data]
+    return np.array(X), np.array(y)
+
+# Load all splits
+train_data = load_jsonl(TRAIN_PATH)
+val_data = load_jsonl(VAL_PATH)
+test_data = load_jsonl(TEST_PATH)
+
+X_train, y_train = prepare_dataset(train_data)
+X_val, y_val = prepare_dataset(val_data)
+X_test, y_test = prepare_dataset(test_data)
+
+print(f"Train: {X_train.shape[0]} samples, {X_train.shape[1]} features")
+print(f"Val:   {X_val.shape[0]} samples")
+print(f"Test:  {X_test.shape[0]} samples")
+
+# Train baseline model — Random Forest (robust, interpretable, good default for tabular data)
+model = RandomForestClassifier(n_estimators=200, max_depth=10, random_state=42, class_weight="balanced")
+model.fit(X_train, y_train)
+
+# Evaluate on validation set (for tuning reference)
+val_preds = model.predict(X_val)
+print(f"\n--- Validation Set Performance ---")
+print(f"Accuracy:  {accuracy_score(y_val, val_preds):.3f}")
+print(f"Precision: {precision_score(y_val, val_preds):.3f}")
+print(f"Recall:    {recall_score(y_val, val_preds):.3f}")
+print(f"F1 Score:  {f1_score(y_val, val_preds):.3f}")
+
+# Final evaluation on held-out test set — this is the real result
+test_preds = model.predict(X_test)
+print(f"\n--- Test Set Performance (FINAL) ---")
+print(f"Accuracy:  {accuracy_score(y_test, test_preds):.3f}")
+print(f"Precision: {precision_score(y_test, test_preds):.3f}")
+print(f"Recall:    {recall_score(y_test, test_preds):.3f}")
+print(f"F1 Score:  {f1_score(y_test, test_preds):.3f}")
+
+cm = confusion_matrix(y_test, test_preds)
+print(f"\nConfusion Matrix (Test Set):")
+print(f"                 Predicted: No   Predicted: Yes")
+print(f"Actual: No       {cm[0][0]:>13}   {cm[0][1]:>14}")
+print(f"Actual: Yes      {cm[1][0]:>13}   {cm[1][1]:>14}")
+
+# Feature importance (useful for your paper's discussion section)
+feature_names = ["wind_speed", "solar_irradiance", "storm_flag", "load_multiplier",
+                  "total_wind_mw", "total_solar_mw", "has_outage", "outage_storm", "outage_equipment"]
+print(f"\nFeature Importances:")
+for name, importance in sorted(zip(feature_names, model.feature_importances_), key=lambda x: -x[1]):
+    print(f"  {name:20s}: {importance:.3f}")
