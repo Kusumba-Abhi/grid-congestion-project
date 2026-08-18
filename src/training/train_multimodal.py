@@ -25,7 +25,6 @@ def tokenize(text):
     tokens = re.findall(r"[a-z]+", text)
     return tokens
 
-# Load data
 train_data = load_jsonl(TRAIN_PATH)
 val_data = load_jsonl(VAL_PATH)
 test_data = load_jsonl(TEST_PATH)
@@ -34,7 +33,6 @@ print(f"Train: {len(train_data)} scenarios")
 print(f"Val:   {len(val_data)} scenarios")
 print(f"Test:  {len(test_data)} scenarios")
 
-# Build vocabulary from training text only
 word_counts = Counter()
 for scenario in train_data:
     tokens = tokenize(scenario["text_report"])
@@ -51,7 +49,6 @@ print(f"Vocabulary size: {len(vocab)}")
 with open("data/processed/vocab.json", "w") as f:
     json.dump(vocab, f)
 
-# ── Convert text to padded numeric sequences ──────────────
 MAX_LEN = 30
 
 def text_to_sequence(text, vocab, max_len=MAX_LEN):
@@ -61,7 +58,6 @@ def text_to_sequence(text, vocab, max_len=MAX_LEN):
     seq = seq + [vocab["<PAD>"]] * (max_len - len(seq))
     return seq
 
-# ── Structured feature extraction (normalized) ──────────────
 def extract_structured_features(scenario):
     weather = scenario["weather"]
     event = scenario["event"]
@@ -79,7 +75,6 @@ def extract_structured_features(scenario):
         1 if event.get("cause") == "equipment_failure" else 0,
     ]
 
-# ── PyTorch Dataset ─────────────────────────────────────────
 class ScenarioDataset(Dataset):
     def __init__(self, data, vocab):
         self.structured = [extract_structured_features(s) for s in data]
@@ -106,7 +101,6 @@ test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
 print(f"\nDataLoaders ready. Train batches: {len(train_loader)}")
 
-# ── Multi-modal model architecture ──────────────────────────
 class MultiModalCongestionModel(nn.Module):
     def __init__(self, vocab_size, struct_dim=9, embed_dim=16, hidden_dim=32):
         super().__init__()
@@ -134,7 +128,6 @@ class MultiModalCongestionModel(nn.Module):
 model = MultiModalCongestionModel(vocab_size=len(vocab))
 print(f"\nModel architecture:\n{model}")
 
-# ── Training setup ──────────────────────────────────────────
 pos_weight = torch.tensor([len(train_data) / (2 * sum(1 for s in train_data if s["congested"]))])
 criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
@@ -164,7 +157,11 @@ for epoch in range(EPOCHS):
     val_acc = accuracy_score(val_labels_list, val_preds_list)
     print(f"Epoch {epoch+1}/{EPOCHS} - Train Loss: {total_loss/len(train_loader):.4f} - Val Accuracy: {val_acc:.3f}")
 
-# ── Final evaluation on test set ─────────────────────────────
+torch.save(model.state_dict(), "app/model2_multimodal.pt")
+with open("app/vocab.json", "w") as f:
+    json.dump(vocab, f)
+print("Model 2 saved to app/model2_multimodal.pt")
+
 model.eval()
 test_preds_list, test_labels_list = [], []
 with torch.no_grad():
