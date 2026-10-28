@@ -28,9 +28,9 @@ The same pipeline is trained and validated separately on six grids:
 | Topology | Description |
 |---|---|
 | `us_ieee118` | IEEE 118-bus test system (primary benchmark) |
-| `uk_ieee30` | IEEE 30-bus test system |
-| `fr_pegase89` | PEGASE 89-bus European test case |
-| `gb_full` | Great Britain transmission network |
+| `ieee30` | IEEE 30-bus test system |
+| `fr_pegase89` | Real RTE (France) 89-bus network snapshot |
+| `gb_full` | Real Great Britain transmission network |
 | `eu_case300` | IEEE 300-bus test system |
 | `india_synthetic` | Custom 5-region Indian grid (Northern, Western, Southern, Eastern, North-Eastern) parameterized with real CEA generation capacity and Grid-India inter-regional transfer capacity data |
 
@@ -38,18 +38,20 @@ No public Indian grid dataset exists, so `india_synthetic` was built from publis
 
 ## Results
 
-Selected test-set results:
+Test-set results for all six topologies (2,500 scenarios per topology, 70/15/15 train/validation/test split):
 
-| Topology | Model 1 (RF) | Model 2 (LSTM fusion) |
-|---|---|---|
-| `us_ieee118` | 98.4% accuracy, 95.6% F1 | 99.1% accuracy, 97.2% F1 |
-| `india_synthetic` | 91.2% accuracy, 88.7% F1 | 89.0% accuracy, 86.0% F1 |
-| `gb_full` | 99.7% accuracy | 83.1% accuracy |
-| `eu_case300` | 93.6% accuracy, 87.0% F1 | 71.7% accuracy, 41.8% F1 |
+| Topology | Model 1 (RF) Accuracy | Model 1 (RF) F1 | Model 2 (LSTM fusion) Accuracy | Model 2 (LSTM fusion) F1 |
+|---|---|---|---|---|
+| `us_ieee118` | 0.984 | 0.956 | 0.991 | 0.972 |
+| `ieee30` | 0.968 | 0.885 | 0.965 | 0.879 |
+| `fr_pegase89` | 0.963 | 0.900 | 0.955 | 0.878 |
+| `gb_full` | 0.997 | 0.994 | 0.831 | 0.591 |
+| `eu_case300` | 0.936 | 0.870 | 0.717 | 0.418 |
+| `india_synthetic` | 0.912 | 0.887 | 0.890 | 0.860 |
 
-**Key finding:** the benefit of multimodal (structured + text) fusion depends on a topology's electrical operating margin. Fusion helps on grids with balanced margins, but underperforms the structured baseline on narrow-margin grids such as `gb_full` and `eu_case300`. This pattern is only visible because the system is tested across multiple topologies.
+**Key finding:** the value of multimodal (structured + text) fusion depends on a topology's electrical operating margin. On grids where congestion has several drivers, the two models perform within about three F1 points of each other, and fusion is ahead on `us_ieee118`. On narrow-margin, load-dominated grids such as `gb_full` and `eu_case300`, fusion clearly underperforms the structured baseline. This pattern is only visible because the system is tested across multiple topologies.
 
-On the IEEE 118-bus system, the redispatch optimizer resolved all 40 of 40 convergent congested scenarios while increasing renewable usage from 11.5% to 28.3%.
+**Redispatch:** the OPF-based redispatch module resolves detected congestion on four of the six topologies. On the IEEE 118-bus system, it reduced line loading from 101.46% to 86.99% while raising the renewable share from 19.9% to 45.1%. On the Indian grid model, it resolved a severe 131.10% loading down to 100%. On `fr_pegase89` and `gb_full`, the OPF does not yet converge; this is a known limitation and is being investigated.
 
 ## Project Structure
 
@@ -88,11 +90,17 @@ grid-congestion-project/
 
 Python, pandapower, scikit-learn, PyTorch, Jupyter and ipywidgets.
 
+## Publication
+
+A paper based on this project, *"A Multi-Topology Machine Learning Framework for Power Grid Congestion Prediction and Renewable-Prioritized Redispatch"*, has been submitted to IIPESS 2027 (International Conference on Intelligent Power, Energy and Sustainable Systems, NIT Jalandhar) and is currently under review.
+
 ## Future Work
 
+- Resolve OPF convergence on `fr_pegase89` and `gb_full` through network-specific reactive-power and voltage-constraint tuning
+- Add a loading-margin safety term to the redispatch objective
 - A single graph neural network (GNN) model that generalizes across topologies, instead of separate weights per grid
-- Integration of real-time grid telemetry
+- A more detailed multi-bus-per-region Indian grid model as more transmission data becomes available
 
 ## Authors
 
-Somashekar Patnam and Sai Abhinav, Department of Information Technology, Chaitanya Bharathi Institute of Technology (CBIT), under the guidance of Dr Prathima Thirumalareddy.
+Somashekar Patnam and K. Sai Abhinav, Department of Information Technology, Chaitanya Bharathi Institute of Technology (CBIT), Hyderabad, under the guidance of Dr Prathima Thirumalareddy, with S Kamala Kumari (Sir C R Reddy College of Engineering).
